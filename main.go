@@ -69,7 +69,7 @@ func generate() {
 	abonsList := []Abons{
 		{
 			TaskID:     1,
-			SectorID:   101,
+			SectorID:   99,
 			Command:    "task_completed",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -81,7 +81,7 @@ func generate() {
 		},
 		{
 			TaskID:     1,
-			SectorID:   101,
+			SectorID:   100,
 			Command:    "block",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -105,7 +105,7 @@ func generate() {
 		},
 		{
 			TaskID:     1,
-			SectorID:   101,
+			SectorID:   102,
 			Command:    "block",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -117,7 +117,7 @@ func generate() {
 		},
 		{
 			TaskID:     2,
-			SectorID:   101,
+			SectorID:   103,
 			Command:    "block",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -129,7 +129,7 @@ func generate() {
 		},
 		{
 			TaskID:     2,
-			SectorID:   101,
+			SectorID:   104,
 			Command:    "block",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -141,7 +141,7 @@ func generate() {
 		},
 		{
 			TaskID:     2,
-			SectorID:   101,
+			SectorID:   105,
 			Command:    "task_completed",
 			Msisdn:     "1234567890",
 			Imsi:       "9876543210",
@@ -178,6 +178,12 @@ func generate() {
 		}
 
 		if abons.Command == "task_completed" {
+			fmt.Print(time.Now())
+			time.Sleep(time.Second * 30)
+
+		}
+
+		if abons.Command == "block" && abons.SectorID == 101 {
 			fmt.Print(time.Now())
 			time.Sleep(time.Second * 30)
 
