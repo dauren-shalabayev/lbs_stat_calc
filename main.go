@@ -35,10 +35,11 @@ const (
 )
 
 var (
-	mu             sync.Mutex
-	taskData       = make(map[int][]Abons)
-	taskTimers     = make(map[int]*time.Timer) // таймеры для каждой задачи
-	TASK_COMPLETED = "task_completed"
+	mu                 sync.Mutex
+	taskData           = make(map[int][]Abons)
+	taskTimers         = make(map[int]*time.Timer) // таймеры для каждой задачи
+	TASK_COMPLETED     = "task_completed"
+	taskCompleteTimers = make(map[int]*time.Timer)
 )
 
 func generate() {
@@ -173,19 +174,19 @@ func generate() {
 		if err != nil {
 			log.Printf("Ошибка при отправке сообщения: %s", err)
 		} else {
-			fmt.Printf("Сообщение отправлено: %s, %s", abons.Command, time.Now())
+			fmt.Printf("Сообщение отправлено: %s, %s, %d", abons.Command, time.Now(), abons.TaskID)
 			fmt.Println()
 		}
 
 		if abons.Command == "task_completed" {
 			fmt.Print(time.Now())
-			time.Sleep(time.Second * 30)
+			time.Sleep(time.Second * 20)
 
 		}
 
 		if abons.Command == "block" && abons.SectorID == 101 {
 			fmt.Print(time.Now())
-			time.Sleep(time.Second * 30)
+			time.Sleep(time.Second * 20)
 
 		}
 	}
@@ -244,8 +245,6 @@ func main() {
 
 		taskData[taskID] = append(taskData[taskID], abons)
 		fmt.Println(abons.ReturnCode, abons.Msisdn, abons.Service, abons.Command, time.Now())
-		// switch abons.Command {
-		// case TASK_COMPLETED:
 
 		/* Если таймер существует, значит, ранее уже был установлен таймер для этого taskID,
 		но нам нужно его перезапустить, так как поступило новое сообщение. */
@@ -261,11 +260,28 @@ func main() {
 			defer mu.Unlock()
 
 			process(taskID, taskData[taskID])
-			delete(taskData, taskID)
+			//delete(taskData, taskID) // можно удалить тут чтобы хранить в памяти, но как долго хранить?
 			delete(taskTimers, taskID)
 
 		})
-		// }
+
+		if abons.Command == "task_completed" {
+			if completeTimer, exists := taskCompleteTimers[taskID]; exists {
+				completeTimer.Stop()
+			}
+
+			// Таймер, чтобы удалить данные taskData для taskID через минуту
+			taskCompleteTimers[taskID] = time.AfterFunc(1*time.Minute, func() {
+				mu.Lock()
+				defer mu.Unlock()
+
+				if _, exists := taskData[taskID]; exists {
+					fmt.Printf("Удаляем данные taskData для taskID %d по истечении 1 минуты без новых сообщений\n", taskID)
+					delete(taskData, taskID)
+					delete(taskCompleteTimers, taskID)
+				}
+			})
+		}
 
 	}
 }
