@@ -30,8 +30,8 @@ type Abons struct {
 }
 
 const (
-	rabbitMQURL = "amqp://guest:guest@localhost:5672/" // Замените на ваши данные подключения
-	queueName   = "abons_log"                          // Название очереди
+	rabbitMQURL = "amqp://guest:guest@localhost:5672/"
+	queueName   = "abons_log"
 )
 
 var (
