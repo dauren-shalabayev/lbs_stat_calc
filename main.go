@@ -246,9 +246,16 @@ func main() {
 		fmt.Println(abons.ReturnCode, abons.Msisdn, abons.Service, abons.Command, time.Now())
 		// switch abons.Command {
 		// case TASK_COMPLETED:
+
+		/* Если таймер существует, значит, ранее уже был установлен таймер для этого taskID,
+		но нам нужно его перезапустить, так как поступило новое сообщение. */
 		if timer, exists := taskTimers[taskID]; exists {
 			timer.Stop()
 		}
+
+		/* Создает таймер, который будет ждать 5 секунд.
+		Если за это время для taskID не поступит новых сообщений, таймер вызовет функцию process.
+		*/
 		taskTimers[taskID] = time.AfterFunc(5*time.Second, func() {
 			mu.Lock()
 			defer mu.Unlock()
