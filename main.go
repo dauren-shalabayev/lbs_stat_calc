@@ -356,20 +356,21 @@ func main() {
 }
 
 func process(taskID int, abonsData []models.Abons, operation string, r *redis.Redis) {
-	wrongBlockStat, wrongUnblockStat, stat := CompareLog(abonsData, taskID, operation)
+	wrongBlockStat, wrongUnblockStat, wrongFullUnblockStat, stat := CompareLog(abonsData, taskID, operation)
 	taskReportJSON, err := GenerateTaskReportJSON(taskID, operation, stat)
 	if err != nil {
 		fmt.Println("failed to generate task report JSON:")
 	}
 	fmt.Println(taskReportJSON)
-	GenerateRetryCache(taskID, wrongBlockStat, wrongUnblockStat, r)
+	GenerateRetryCache(taskID, wrongBlockStat, wrongUnblockStat, wrongFullUnblockStat, r)
 
 }
 
-func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.Abons, []models.Abons, map[int]map[string]*models.ServiceStats) {
+func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.Abons, []models.Abons, []models.Abons, map[int]map[string]*models.ServiceStats) {
 	results := make(map[int]map[string]*models.ServiceStats)
 	wrongBlockStat := []models.Abons{}
 	wrongUnblockStat := []models.Abons{}
+	wrongFullUnblockStat := []models.Abons{}
 
 	log.Printf("Count abons_log: %d", len(abonsData)-1)
 	// Проход по данным абонентов и сравнение с кэшем и предыдущими результатами
@@ -423,6 +424,7 @@ func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.A
 			if returnCode == 0 {
 				currentResult.Stat.SuccessUnblocks++
 			} else {
+				currentResult.Stat.SuccessBlocks++
 				currentResult.Stat.WrongUnblocks++
 				wrongUnblockStat = append(wrongUnblockStat, item)
 				log.Printf("Wrong unblock for MSISDN: %s, IMSI: %s, LacCell: %s, SectorID: %d, Command: %s", msisdn, imsi, lacCell, sectorID, command)
@@ -431,6 +433,7 @@ func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.A
 			if returnCode == 0 {
 				currentResult.Stat.SuccessUnblocks++
 			} else {
+				currentResult.Stat.SuccessBlocks++
 				currentResult.Stat.WrongUnblocks++
 				wrongUnblockStat = append(wrongUnblockStat, item)
 				log.Printf("Wrong move for MSISDN: %s, IMSI: %s, LacCell: %s, SectorID: %d, Command: %s", msisdn, imsi, lacCell, sectorID, command)
@@ -440,7 +443,9 @@ func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.A
 				currentResult.Stat.SuccessUnblocks++
 			} else {
 				fmt.Println("ERROR WHILE FULL UNBLOCK")
+				currentResult.Stat.SuccessBlocks++
 				currentResult.Stat.WrongUnblocks++
+				wrongUnblockStat = append(wrongFullUnblockStat, item)
 				log.Printf("Wrong fullunblock for MSISDN: %s, IMSI: %s, LacCell: %s, SectorID: %d, Command: %s", msisdn, imsi, lacCell, sectorID, command)
 
 			}
@@ -448,7 +453,7 @@ func CompareLog(abonsData []models.Abons, key int, operation string) ([]models.A
 
 	}
 
-	return wrongBlockStat, wrongUnblockStat, results
+	return wrongBlockStat, wrongUnblockStat, wrongFullUnblockStat, results
 }
 
 func GenerateTaskReportJSON(taskID int, operation string, statResults map[int]map[string]*models.ServiceStats) ([]byte, error) {
@@ -476,7 +481,7 @@ func GenerateTaskReportJSON(taskID int, operation string, statResults map[int]ma
 	return taskReportJSON, nil
 }
 
-func GenerateRetryCache(key int, wrongBlockStat []models.Abons, wrongUnblockStat []models.Abons, r *redis.Redis) error {
+func GenerateRetryCache(key int, wrongBlockStat []models.Abons, wrongUnblockStat []models.Abons, wrongFullUnblockStat []models.Abons, r *redis.Redis) error {
 	// Удаление MSISDN из кэша блокировки при ошибке блокирования
 	retryBlock := make(map[string]models.CacheValue)
 	retryUnblock := make(map[string]models.CacheValue)
@@ -504,6 +509,27 @@ func GenerateRetryCache(key int, wrongBlockStat []models.Abons, wrongUnblockStat
 	if len(wrongUnblockStat) > 0 {
 		unblockKeyStr := strconv.Itoa(key) + "_retry_unblock"
 		for _, abons := range wrongUnblockStat {
+			lacCell, err := utils.NormalizeLocation(abons.Lac, abons.CellID)
+			if err != nil {
+				return fmt.Errorf("ошибка нормализации местоположения для абонента %s: %v", abons.Msisdn, err)
+			}
+			retryUnblock[abons.Msisdn] = models.CacheValue{
+				LacCell:  lacCell,
+				SectorID: abons.SectorID,
+				Imsi:     abons.Imsi,
+			}
+			log.Printf("Не разблокированный абонент: %s", abons.Msisdn)
+		}
+		if err := cache.UpdateCache(unblockKeyStr, retryUnblock, r); err != nil {
+			return fmt.Errorf("Ошибка обновления кэша разблокировки: %v", err)
+		}
+	} else {
+		log.Printf("Нет данных по неразблокированным абонентам...")
+	}
+
+	if len(wrongFullUnblockStat) > 0 {
+		unblockKeyStr := strconv.Itoa(key) + "_retry_fullunblock"
+		for _, abons := range wrongFullUnblockStat {
 			lacCell, err := utils.NormalizeLocation(abons.Lac, abons.CellID)
 			if err != nil {
 				return fmt.Errorf("ошибка нормализации местоположения для абонента %s: %v", abons.Msisdn, err)
