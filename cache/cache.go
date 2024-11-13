@@ -32,8 +32,8 @@ func GetPreviousResult(r Cache, key int) (map[string]models.CacheValue, error) {
 	return prevRes, nil
 }
 
-func GetUnblock(r *redis.Redis, key int) (map[string]models.CacheValue, error) {
-	keyStr := strconv.Itoa(key) + "_unblock"
+func GetUnblock(r *redis.Redis, keyStr string) (map[string]models.CacheValue, error) {
+
 	b, err := r.Get(keyStr)
 	if err != nil {
 		return nil, err
@@ -59,6 +59,17 @@ func CacheData(taskID string, subsCache map[string]models.CacheValue, r *redis.R
 	compB := gozstd.CompressLevel(nil, b, 1)
 
 	return r.Set(taskID, compB)
+}
+
+func CombineResults(prevRes map[string]models.CacheValue, newRes map[string]models.CacheValue) (map[string]models.CacheValue, error) {
+	combinedMap := make(map[string]models.CacheValue)
+	for k, v := range prevRes {
+		combinedMap[k] = v
+	}
+	for k, v := range newRes {
+		combinedMap[k] = v
+	}
+	return combinedMap, nil
 }
 
 func UpdateCache(key string, cacheData map[string]models.CacheValue, r *redis.Redis) error {
